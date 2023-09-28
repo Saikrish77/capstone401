@@ -1,6 +1,7 @@
 const express = require('express');
 const admin = require('firebase-admin');
 const serviceAccount = require("./key.json");
+const bcrypt = require("bcrypt");
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount)
@@ -11,15 +12,15 @@ const app = express();
 
 app.use(express.urlencoded({ extended: true }));
 
-
-app.get("/", function(req, res) {
+app.get("/", function (req, res) {
   res.sendFile(__dirname + "/index.html");
 });
-app.post("/signup", async function(req, res) {
-  const { signUpEmail, signUpPassword } = req.body; 
+
+app.post("/signup", async function (req, res) {
+  const { signUpEmail, signUpPassword } = req.body;
 
   try {
-    // Check if the email is already in the database
+    
     const snapshot = await db.collection('mydata')
       .where('Email', '==', signUpEmail)
       .get();
@@ -27,11 +28,14 @@ app.post("/signup", async function(req, res) {
     if (!snapshot.empty) {
       res.send("This email is already registered. Please <a href='/'>log in</a>.");
     } else {
-      // If email is not present, proceed with registration
+      
+      const hashedPassword = await bcrypt.hash(signUpPassword, 10);
+
       await db.collection('mydata').add({
         Email: signUpEmail,
-        Password: signUpPassword
+        Password: hashedPassword, 
       });
+
       res.send("You Signed up Successfully with " + signUpEmail + ". <a href='/'>Click here to go to the login page</a>");
     }
   } catch (error) {
@@ -40,18 +44,25 @@ app.post("/signup", async function(req, res) {
   }
 });
 
-
-app.post('/login', async function(req, res) {
-  const { loginEmail, loginPassword } = req.body; 
+app.post('/login', async function (req, res) {
+  const { loginEmail, loginPassword } = req.body;
 
   try {
     const snapshot = await db.collection('mydata')
       .where('Email', '==', loginEmail)
-      .where('Password', '==', loginPassword)
       .get();
 
     if (!snapshot.empty) {
-      res.sendFile(__dirname + "/nutapi1.html");
+      const userData = snapshot.docs[0].data();
+      const hashedPassword = userData.Password;
+
+      const passwordMatch = await bcrypt.compare(loginPassword, hashedPassword);
+
+      if (passwordMatch) {
+        res.sendFile(__dirname + "/nutapi1.html");
+      } else {
+        res.send("Incorrect password. Please try again.");
+      }
     } else {
       res.send("Data not present in Firebase, please login");
     }
@@ -61,7 +72,7 @@ app.post('/login', async function(req, res) {
   }
 });
 
-const port = 200; 
-app.listen(port, function() {
+const port = 2000;
+app.listen(port, function () {
   console.log("Server started on port", port);
 });
